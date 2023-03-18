@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, render_template
 import requests
 import xmltodict
 from pprint import pprint
@@ -10,14 +10,15 @@ from fuzzywuzzy import fuzz
 
 app = Flask(__name__)
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/")
 def handle_webhook():
     # Load environment variables from .env file
     load_dotenv()
 
     # Connect to Notion API
-    notion = Client(auth=os.getenv('NOTION_API_KEY'))
-    database_id = os.getenv('NOTION_DATABASE_ID')
+
+    notion = Client(auth=os.environ["NOTION_KEY"])
+    database_id = os.getenv("NOTION_DATABASE_ID")
 
     # working retrieves the title of last element in db===========================================================================================================================
 
