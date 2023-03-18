@@ -16,8 +16,8 @@ def handle_webhook():
     load_dotenv()
 
     # Connect to Notion API
-    notion = Client(auth=openai_secret_manager.get_secret("notion")["api_key"])
-    database_id = openai_secret_manager.get_secret("notion")["database_id"]
+    notion = Client(auth=os.getenv('NOTION_API_KEY'))
+    database_id = os.getenv('NOTION_DATABASE_ID')
 
     # working retrieves the title of last element in db===========================================================================================================================
 
