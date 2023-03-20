@@ -84,6 +84,7 @@ def handle_webhook():
     max_time = game_info["maxplaytime"]["@value"]
     genre = game_info["link"][0]["@value"]
 
+
     #Update the Notion database with board game information
     notion.pages.update(page_id= last_page_id, properties={
         "Minimum Players": {"rich_text": [{"text": {"content": min_players}}]},
