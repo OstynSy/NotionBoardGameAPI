@@ -6,6 +6,23 @@ from dotenv import load_dotenv
 import os
 from fuzzywuzzy import fuzz
 
+def fuzzyMatch(bg_name, items):
+        # Fuzzy match title to find ID of multiple results
+    for item in items:
+        best_match_id = None
+        best_match_score = 0
+        name = item["name"]["@value"]
+        #pprint(name)
+        match_score = fuzz.token_sort_ratio(bg_name, name)
+        if name == bg_name:
+            best_match_id = item["@id"]
+            return best_match_id
+
+        elif match_score > best_match_score:
+            best_match_score = match_score
+            best_match_id = item["@id"]
+        return best_match_id
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -17,10 +34,10 @@ bg_database_id = os.getenv("NOTION_DATABASE_ID")
 list_empty_pages = []
 results = notion.databases.query(database_id=bg_database_id)
 for page in results["results"]:
-    if page["properties"]["Integration Status"]["rich_text"] == []:
+    if (page["properties"]["Name"]["title"] != []) and (page["properties"]["Integration Status"]["rich_text"] == []):
         list_empty_pages.append(page)
-pprint(len(list_empty_pages))
 
+pprint(len(list_empty_pages))
 # Set up Boardgamegeek API parameters
 base_url = "https://www.boardgamegeek.com/xmlapi2/"
 search_path = "search?type=boardgame&query="
@@ -28,6 +45,33 @@ thing_path = "thing?type=boardgame&stats=1&id="
 
 # Search for BGG Data on each page
 for page in list_empty_pages:
+    #Search for board game information using the Boardgamegeek API
+    bg_name = page["properties"]["Name"]["title"][0]["plain_text"]
+    pprint("")
+    pprint(bg_name)
+
+    response = requests.get(base_url + search_path + bg_name)
+    xml_data = response.content
+    json_data = xmltodict.parse(xml_data)
+    total = int(json_data.get("items", {}).get("@total", 0))
+    items = json_data.get("items", {}).get("item", [])
+
+
+    # Only Fuzzy match if there are more than 1 item (4 indicates more than 4 fields in the json)
+    pprint(total)
+
+    # BGG found 0 results
+    if total == 0:
+        #report error that BGG can not find that item
+        pprint("no results")
+    # BGG found multiple results
+    elif total > 1:
+        best_match_id = fuzzyMatch(bg_name, items)
+        pprint(f"Best match ID: {best_match_id}")
+    else:
+        pprint(items)
+        best_match_id = items["@id"]
+        pprint(f"Best match ID: {best_match_id}")
 
 
 
@@ -54,26 +98,6 @@ for page in list_empty_pages:
 
 
 
-# # Search for board game information using the Boardgamegeek API
-# response = requests.get(base_url + search_path + last_title)
-# xml_data = response.content
-# json_data = xmltodict.parse(xml_data)
-# items = json_data.get("items", {}).get("item", [])
-
-# #pprint(items)
-
-# # Fuzzy match title to find ID of multiple results
-# best_match_id = None
-# best_match_score = 0
-
-# for item in items:
-#     name = item["name"]["@value"]
-#     #pprint(name)
-#     match_score = fuzz.token_sort_ratio(last_title, name)
-#     if match_score > best_match_score:
-#         best_match_score = match_score
-#         best_match_id = item["@id"]
-# pprint(f"Best match ID: {best_match_id}")
 
 # game_info_response = requests.get(base_url + thing_path + str(best_match_id))
 # game_info_data = game_info_response.content
