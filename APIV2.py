@@ -7,23 +7,23 @@ from rapidfuzz import fuzz
 # Takes boardgame name and a list of items
 # Fuzzy matches the name with the names of the other items and returns the id that best matches
 def fuzzyMatch(bg_name, items):
+    best_id = None
     for item in items:
-        pprint(len(items))
         best_match_score = 0
         name = item["name"]["@value"]
         match_score = fuzz.ratio(bg_name, name)
 
         # If the name matches BGG result name exactly
         if name == bg_name:
-            best_match_id = item["@id"]
-            return best_match_id
+            best_id = item["@id"]
+            return best_id
 
         #Loops through each search result and looks for the best match
         elif (match_score > best_match_score) and (match_score > 80):
             best_match_score = match_score
-            best_match_id = item["@id"]
+            best_id = item["@id"]
 
-    return best_match_id
+    return best_id
 
 try:
     # Connect to Notion API
@@ -45,12 +45,14 @@ for page in results["results"]:
 # Set up Boardgamegeek API parameters
 base_url = "https://www.boardgamegeek.com/xmlapi2/"
 search_path = "search?type=boardgame&query="
-thing_path = "thing?type=boardgame&stats=1&id="
+thing_path = "thing?type=boardgame,boardgameexpansion,boardgameaccessory,boardgameintegration,boardgamecompilation,boardgameimplementation&stats=1&id="
 
 # Search for BGG Data on each page
 for page in list_empty_pages:
     error = ""
+    integration_status = ""
     #Search for board game information using the Boardgamegeek API. Uses Name and ID of the Notion page and searches in BGG to find number of results
+    
     bg_name = page["properties"]["Name"]["title"][0]["plain_text"]
     page_id = page["id"]
 
@@ -99,7 +101,6 @@ for page in list_empty_pages:
             game_info_data = game_info_response.content
             game_info = xmltodict.parse(game_info_data)['items']['item']
 
-            
             #Store Json values as Variables
             image_url = {
                 "name": "Image.png",
@@ -128,7 +129,7 @@ for page in list_empty_pages:
             #pprint(game_info)
     except:
         integration_status = "BAD"
-        error = "Board Game was found but BGG failed to show data. Check these links out! " + base_url + thing_path + str(best_match_id) + " OR manually find your game at https://boardgamegeek.com/boardgame/" + str(best_match_id) + "/" + bg_name
+        error = "Please double check the naming of your Board Game or manually find your game at https://boardgamegeek.com/boardgame/" + str(best_match_id) + "/" + bg_name
         pprint("There was an error with the results") 
 
     if integration_status == "OK":
@@ -151,6 +152,3 @@ for page in list_empty_pages:
             "Integration Status": {"rich_text": [{"text": {"content": integration_status}}]},
             "Error": {"rich_text": [{"text": {"content": error}}]},
         })            
-   
-  
-
