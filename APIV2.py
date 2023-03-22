@@ -2,32 +2,38 @@ import requests
 import xmltodict
 from pprint import pprint
 from notion_client import Client
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 
 # Takes boardgame name and a list of items
 # Fuzzy matches the name with the names of the other items and returns the id that best matches
 def fuzzyMatch(bg_name, items):
     for item in items:
-        best_match_id = None
+        pprint(len(items))
         best_match_score = 0
         name = item["name"]["@value"]
-        #pprint(name)
-        match_score = fuzz.token_sort_ratio(bg_name, name)
+        match_score = fuzz.ratio(bg_name, name)
+
+        # If the name matches BGG result name exactly
         if name == bg_name:
             best_match_id = item["@id"]
             return best_match_id
 
-        elif match_score > best_match_score:
+        #Loops through each search result and looks for the best match
+        elif (match_score > best_match_score) and (match_score > 80):
             best_match_score = match_score
             best_match_id = item["@id"]
-        return best_match_id
 
-# Connect to Notion API
-notion = Client(auth="secret_wkHmezRHUYMn3cKFJyFqS0434IH1XBU2BzyiuoLECtr")
-bg_database_id = "168933707099481d9064fa5c04b4dbb5"
+    return best_match_id
 
-# Obtains all data in the database
-results = notion.databases.query(database_id=bg_database_id)
+try:
+    # Connect to Notion API
+    notion = Client(auth="secret_wkHmezRHUYMn3cKFJyFqS0434IH1XBU2BzyiuoLECtr")
+    bg_database_id = "168933707099481d9064fa5c04b4dbb5"
+
+    # Obtains all data in the database
+    results = notion.databases.query(database_id=bg_database_id)
+except:
+    pprint("There was an error connection to your Notion database. Please check your authentication key or database id again!")
 
 # Loop through the whole database and find Pages with Integration Status that are empty BAD and OK are excluded
 list_empty_pages = []
@@ -53,9 +59,14 @@ for page in list_empty_pages:
     pprint(page_id)
 
     # search BGG API
-    response = requests.get(base_url + search_path + bg_name)
-    xml_data = response.content
-    json_data = xmltodict.parse(xml_data)
+    try:
+        response = requests.get(base_url + search_path + bg_name)
+        xml_data = response.content
+        json_data = xmltodict.parse(xml_data)
+    except:
+        integration_status = "BAD"
+        error = "There was an error searching for your board game on BGG. Check your board game name!"
+
     total = int(json_data.get("items", {}).get("@total", 0))
     items = json_data.get("items", {}).get("item", [])
 
@@ -63,30 +74,32 @@ for page in list_empty_pages:
     pprint(f"Search Results: {total}")
     best_match_id = -1
 
+    # BGG found 0 results
+    if total == 0:
+        #report error that BGG can not find that item
+        integration_status = "BAD"
+        error = "No Results Found on BGG. Try being more accurate with your name. It is also possible that BGG does not have data on your game"
+        pprint("no results")
+
+    # BGG found multiple results
+    elif total > 1:
+        best_match_id = fuzzyMatch(bg_name, items)
+        pprint(f"Best match ID: {best_match_id}")
+
+    #BGG only found 1 result
+    else:
+        best_match_id = items["@id"]
+        pprint(f"Best match ID: {best_match_id}")
+
     try:
-        # BGG found 0 results
-        if total == 0:
-            #report error that BGG can not find that item
-            integration_status = "BAD"
-            error = "No Results Found on BGG. Try being more accurate with your name. It is also possible that BGG does not have data on your game"
-            pprint("no results")
-
-        # BGG found multiple results
-        elif total > 1:
-            best_match_id = fuzzyMatch(bg_name, items)
-            pprint(f"Best match ID: {best_match_id}")
-
-        #BGG only found 1 result
-        else:
-            best_match_id = items["@id"]
-            pprint(f"Best match ID: {best_match_id}")
-
         #if an ID was found populate all fields with new data and update Notion DB
         if best_match_id != -1:
+                    
             game_info_response = requests.get(base_url + thing_path + str(best_match_id))
             game_info_data = game_info_response.content
             game_info = xmltodict.parse(game_info_data)['items']['item']
 
+            
             #Store Json values as Variables
             image_url = {
                 "name": "Image.png",
@@ -113,28 +126,31 @@ for page in list_empty_pages:
             integration_status = "OK"
             pprint(integration_status)
             #pprint(game_info)
-
-            notion.pages.update(page_id= page_id, properties={
-                "Image": {"files": [image_url]},
-                "Min. Players": {"number": int(min_players)},
-                "Max. Players": {"number": int(max_players)},
-                "Min. Time": {"number": int(min_time)},
-                "Max. Time": {"number": int(max_time)},
-                "Genre": {"multi_select": [genre]},
-                "Geek Rating": {"number": round(float(geek_rating),2)},
-                "Avg. Rating": {"number": round(float(avg_rating),2)},
-                "Num Votes": {"number": int(num_votes)},
-                "Integration Status": {"rich_text": [{"text": {"content": integration_status}}]},
-                "Error": {"rich_text": [{"text": {"content": error}}]},
-            })
-
     except:
         integration_status = "BAD"
-        error= "There were issues searching for results!"
-        pprint("There was an error with the results")        
+        error = "Board Game was found but BGG failed to show data. Check these links out! " + base_url + thing_path + str(best_match_id) + " OR manually find your game at https://boardgamegeek.com/boardgame/" + str(best_match_id) + "/" + bg_name
+        pprint("There was an error with the results") 
 
-    # Update Notion DB that could not be searched or had errors
-    notion.pages.update(page_id= page_id, properties={
-        "Integration Status": {"rich_text": [{"text": {"content": integration_status}}]},
-        "Error": {"rich_text": [{"text": {"content": error}}]},
-    })
+    if integration_status == "OK":
+        notion.pages.update(page_id= page_id, properties={
+            "Image": {"files": [image_url]},
+            "Min. Players": {"number": int(min_players)},
+            "Max. Players": {"number": int(max_players)},
+            "Min. Time": {"number": int(min_time)},
+            "Max. Time": {"number": int(max_time)},
+            "Genre": {"multi_select": [genre]},
+            "Geek Rating": {"number": round(float(geek_rating),2)},
+            "Avg. Rating": {"number": round(float(avg_rating),2)},
+            "Num Votes": {"number": int(num_votes)},
+            "Integration Status": {"rich_text": [{"text": {"content": integration_status}}]},
+            "Error": {"rich_text": [{"text": {"content": error}}]},
+        })  
+    else:
+        # Update Notion DB that could not be searched or had errors
+        notion.pages.update(page_id= page_id, properties={
+            "Integration Status": {"rich_text": [{"text": {"content": integration_status}}]},
+            "Error": {"rich_text": [{"text": {"content": error}}]},
+        })            
+   
+  
+
