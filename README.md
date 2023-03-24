@@ -4,7 +4,9 @@ APIV2.API
 This is the most updated and working version. The other files are deprecated.
 
 These need to be obtained and filled in.
+
 notion = Client(auth="Notion Integration Secret Key")
+
 bg_database_id = "Notion Database ID"
 
 The notion databse must have the same naming convention as the code otherwise it wont work.
