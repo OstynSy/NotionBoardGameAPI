@@ -2,7 +2,7 @@ import requests
 import xmltodict
 from pprint import pprint
 from notion_client import Client
-from rapidfuzz import fuzz
+from fuzzywuzzy import fuzz
 
 # Takes boardgame name and a list of items
 # Fuzzy matches the name with the names of the other items and returns the id that best matches
@@ -14,7 +14,7 @@ def fuzzyMatch(bg_name, items):
         match_score = fuzz.ratio(bg_name, name)
 
         # If the name matches BGG result name exactly
-        if name == bg_name:
+        if name.lower() == bg_name.lower():
             best_id = item["@id"]
             return best_id
 
